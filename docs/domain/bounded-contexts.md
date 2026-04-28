@@ -20,7 +20,7 @@ Identificación de los **bounded contexts** del sistema. Cada context tiene su p
 
 **Modelo central:** `Tool` (manifest entry), `EdgeFunctionEndpoint` (URL + auth), `MCPRequest`/`MCPResponse`.
 
-**Tecnología:** TypeScript + Bun + `@modelcontextprotocol/sdk`. Sin estado.
+**Tecnología:** TypeScript + Node 20 + `@modelcontextprotocol/sdk`. Sin estado. (Runtime Node, no Bun: ver decisión documentada en `docs/superpowers/plans/2026-04-28-mcp-monica-server.md`.)
 
 **No es responsable de:**
 - Lógica de negocio. Es thin proxy. La lógica vive en las edge functions.

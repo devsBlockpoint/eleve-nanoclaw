@@ -49,7 +49,7 @@ nanoclaw container (Bun + Claude Agent SDK)
   │  └─ groups/monica/ (agent group único)
   │
   ▼  MCP over HTTP
-mcp-monica container (Bun + MCP SDK)
+mcp-monica container (Node + MCP SDK)
   │  └─ proxy a Supabase Edge Functions
   │
   ▼  HTTPS + service_role
@@ -122,11 +122,12 @@ Las acciones (`action`) ya están soportadas por `n8n-whatsapp-agent-response` s
 ### 5.1 Stack
 
 - **Lenguaje:** TypeScript
-- **Runtime:** Bun
+- **Runtime:** Node 20+ (`tsx` para ejecución TS sin compilar)
+- **Test runner:** Vitest
 - **MCP SDK:** `@modelcontextprotocol/sdk`
 - **Transport:** HTTP/SSE (no stdio) — mcp-monica corre como container independiente, nanoclaw lo conecta por red.
 
-Justificación: el registry actual (`_generator.ts`, frontmatter parser) ya está en TS; mcp-monica es thin proxy a Supabase, no necesita Python; mismo runtime que nanoclaw simplifica la operación.
+Justificación: el registry actual (`_generator.ts`, frontmatter parser) ya está en TS; mcp-monica es thin proxy a Supabase, no necesita Python; Node está disponible en cualquier host del equipo sin instalar runtimes adicionales. **Nota sobre Bun:** nanoclaw upstream usa Bun dentro de su container, pero su host corre Node + pnpm. Para mcp-monica (container independiente) no había razón fuerte para forzar Bun; pivotamos a Node por simplicidad operativa. La elección está documentada en `docs/superpowers/plans/2026-04-28-mcp-monica-server.md`.
 
 ### 5.2 Estructura
 
@@ -355,7 +356,7 @@ Cosas conocidas pero diferidas:
 | Decisión | Elección | Por qué |
 |---|---|---|
 | Stack del agente | nanoclaw upstream (TS/Bun + Claude Agent SDK) | Ya está construido, hace exactamente lo que necesitamos |
-| Stack del MCP | TS + Bun + `@modelcontextprotocol/sdk` | Mismo runtime que nanoclaw; thin proxy no necesita Python |
+| Stack del MCP | TS + Node 20 + `@modelcontextprotocol/sdk` | Node ya disponible en el host; sin overhead de instalar Bun para un thin proxy. Bun queda solo dentro del container nanoclaw upstream (donde aporta `bun:sqlite` nativo), no en mcp-monica. |
 | Transport MCP | HTTP/SSE | Containers independientes, env-driven, sin acoplar lifecycle |
 | Manifest | Bundled en imagen | Inmutabilidad de la imagen sobre hot-reload |
 | Bridge inbound | `POST /messages` con bearer | Patrón fire-and-forget, alineado con webhook async |

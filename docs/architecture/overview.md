@@ -17,7 +17,7 @@ nanoclaw container (Bun + Claude Agent SDK)
   │  └─ groups/monica/ (agent group único en v1)
   │
   ▼  MCP over HTTP
-mcp-monica container (Bun + MCP SDK)
+mcp-monica container (Node + MCP SDK)
   │  └─ proxy a Supabase Edge Functions
   │
   ▼  HTTPS + service_role
@@ -39,7 +39,7 @@ nanoclaw → POST → n8n-whatsapp-agent-response → WhatsApp (Meta) → usuari
 | Componente | Lenguaje/Runtime | Justificación |
 |---|---|---|
 | nanoclaw | TypeScript + Bun | Stack nativo del fork upstream qwibitai/nanoclaw + Claude Agent SDK |
-| mcp-monica | TypeScript + Bun | Mismo runtime que nanoclaw; thin proxy no necesita Python |
+| mcp-monica | TypeScript + Node 20 | Sin requisitos especiales (thin proxy a HTTP); el host del equipo ya corre Node. Bun no aporta valor en este componente. Nota: nanoclaw upstream usa Bun **dentro** de su container, no en el host. |
 | Supabase Edge Functions | TypeScript + Deno | Preexistente, no cambia |
 | Frontend ÉLEVÉ | TypeScript + React (Lovable) | Preexistente, no cambia |
 
