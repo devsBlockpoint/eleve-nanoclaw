@@ -1,0 +1,81 @@
+# =============================================================================
+# eleve-nanoclaw — orquestación dev local
+# =============================================================================
+# Levanta nanoclaw + mcp-monica conectados por red interna.
+# En producción (Easypanel), este mismo archivo sirve como referencia.
+#
+# Pre-requisitos:
+#   - Repos clonados:
+#       git clone git@github-eleve:devsBlockpoint/nanoclaw.git
+#       git clone git@github-eleve:devsBlockpoint/mcp-monica.git
+#   - .env configurado (cp .env.example .env y completar)
+# =============================================================================
+
+services:
+
+  nanoclaw:
+    build:
+      context: ./nanoclaw
+      dockerfile: Dockerfile
+    container_name: eleve-nanoclaw
+    restart: unless-stopped
+    ports:
+      - "${NANOCLAW_PORT:-3001}:3001"
+    environment:
+      AGENT_INBOUND_TOKEN: ${AGENT_INBOUND_TOKEN}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_AUTH_TOKEN: ${ANTHROPIC_AUTH_TOKEN:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      AGENT_GROUP: ${AGENT_GROUP:-monica}
+      AGENT_SYSTEM_PROMPT_SOURCE: ${AGENT_SYSTEM_PROMPT_SOURCE:-env}
+      AGENT_SYSTEM_PROMPT: ${AGENT_SYSTEM_PROMPT:-}
+      AGENT_SYSTEM_PROMPT_PATH: ${AGENT_SYSTEM_PROMPT_PATH:-}
+      AGENT_SYSTEM_PROMPT_URL: ${AGENT_SYSTEM_PROMPT_URL:-}
+      AGENT_SYSTEM_PROMPT_URL_AUTH: ${AGENT_SYSTEM_PROMPT_URL_AUTH:-}
+      AGENT_SYSTEM_PROMPT_RELOAD_INTERVAL: ${AGENT_SYSTEM_PROMPT_RELOAD_INTERVAL:-0}
+      MCP_MONICA_URL: ${MCP_MONICA_URL:-http://mcp-monica:3000}
+      ELEVE_OUTBOUND_URL: ${ELEVE_OUTBOUND_URL}
+      ELEVE_OUTBOUND_TOKEN: ${ELEVE_OUTBOUND_TOKEN}
+      PORT: "3001"
+    volumes:
+      - nanoclaw-data:/data
+    depends_on:
+      mcp-monica:
+        condition: service_healthy
+    networks:
+      - eleve-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  mcp-monica:
+    build:
+      context: ./mcp-monica
+      dockerfile: Dockerfile
+    container_name: eleve-mcp-monica
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      MCP_PORT: "3000"
+    networks:
+      - eleve-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  eleve-net:
+    driver: bridge
+
+volumes:
+  nanoclaw-data:
+    driver: local
