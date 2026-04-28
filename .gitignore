@@ -1,0 +1,24 @@
+# Subproyectos con su propio repo
+/nanoclaw/
+/mcp-monica/
+
+# Env locales
+.env
+.env.local
+.env.*.local
+*.env
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+
+# Dependencies (si llegan a aparecer en root)
+node_modules/
+
+# Volúmenes locales de Docker
+/data/
