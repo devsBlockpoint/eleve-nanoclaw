@@ -712,8 +712,19 @@ const baseConfig = {
 };
 
 function mockFetch(response: { status: number; body?: unknown; delay?: number }): typeof fetch {
-  return (async (_input: RequestInfo | URL, _init?: RequestInit) => {
-    if (response.delay) await new Promise((r) => setTimeout(r, response.delay));
+  return (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (response.delay) {
+      // Honor AbortController signal so the timeout test exercises the abort path.
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, response.delay);
+        if (init?.signal) {
+          init.signal.addEventListener("abort", () => {
+            clearTimeout(t);
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }
+      });
+    }
     const bodyText = response.body === undefined ? "" : JSON.stringify(response.body);
     return new Response(bodyText, {
       status: response.status,
