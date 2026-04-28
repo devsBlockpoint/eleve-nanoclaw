@@ -4,9 +4,9 @@
 
 **Goal:** Implementar `mcp-monica` como MCP server HTTP que expone al LLM las edge functions de negocio de ÉLEVÉ. Lee `mcp/manifest.json` (ya existente) y por cada tool publica un handler MCP que proxea a la edge function en Supabase. Empaquetado en Docker.
 
-**Architecture:** TypeScript + Bun + `@modelcontextprotocol/sdk`. Transport HTTP/SSE. Thin proxy stateless: cada tool call → POST a `${SUPABASE_URL}/functions/v1/${tool.edge_function}` con `Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}`. Errores HTTP mapeados a errores MCP. Sin lógica de negocio. Tests con `bun:test`. Endpoint `/health` para el healthcheck del compose.
+**Architecture:** TypeScript + Node ≥ 20 + `@modelcontextprotocol/sdk`. Transport HTTP/SSE. Thin proxy stateless: cada tool call → POST a `${SUPABASE_URL}/functions/v1/${tool.edge_function}` con `Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}`. Errores HTTP mapeados a errores MCP. Sin lógica de negocio. Tests con Vitest. Endpoint `/health` para el healthcheck del compose.
 
-**Tech Stack:** Bun ≥ 1.1, TypeScript, `@modelcontextprotocol/sdk` (TS), `gray-matter` (ya usada en `_generator.ts`), `bun:test`. Docker base image: `oven/bun:1.1-alpine`.
+**Tech Stack:** Node ≥ 20, TypeScript, `tsx` (ejecución TS sin compilar), `vitest` (test runner), `@modelcontextprotocol/sdk` (TS), `gray-matter` (ya usada en `_generator.ts`). Docker base image: `node:20-alpine`.
 
 **Spec de referencia:** `docs/superpowers/specs/2026-04-28-eleve-nanoclaw-monica-design.md` sección 5.
 
@@ -18,7 +18,7 @@
 
 | Path | Responsabilidad |
 |---|---|
-| `package.json` | Bun project, deps, scripts |
+| `package.json` | Node project, deps, scripts |
 | `tsconfig.json` | Config TS estricto |
 | `.gitignore` | Ignorar `node_modules`, `.env`, builds |
 | `.dockerignore` | Ignorar `node_modules`, `.git`, tests |
@@ -38,14 +38,14 @@
 | `tests/supabase-client.test.ts` | Tests con fetch mockeado |
 | `tests/tools-loader.test.ts` | Tests con manifest fixture |
 | `tests/server.test.ts` | Tests integración del server (list+call tool) |
-| `Dockerfile` | Multi-stage build con bun:1.1-alpine |
+| `Dockerfile` | Multi-stage build con node:20-alpine |
 
 **Pre-existe (no crear, no modificar):**
 - `mcp/README.md`, `mcp/_pipeline.md`, `mcp/_generator.ts`, `mcp/manifest.json`, `mcp/tools/*.md` — registry source of truth, ya documentado.
 
 ---
 
-### Task 1: Inicializar proyecto Bun
+### Task 1: Inicializar proyecto Node + TypeScript
 
 **Files:**
 - Create: `mcp-monica/package.json`
@@ -65,22 +65,25 @@ Crear `/home/morfi/eleve-nanoclaw/mcp-monica/package.json`:
   "type": "module",
   "description": "MCP server that proxies the LLM to ÉLEVÉ Supabase Edge Functions",
   "scripts": {
-    "start": "bun run src/index.ts",
-    "dev": "bun run --watch src/index.ts",
-    "test": "bun test",
-    "mcp:build": "bun run mcp/_generator.ts",
-    "mcp:build:include-pending": "bun run mcp/_generator.ts -- --include-pending"
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "mcp:build": "tsx mcp/_generator.ts",
+    "mcp:build:include-pending": "tsx mcp/_generator.ts -- --include-pending"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "typescript": "^5.5.0"
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
   },
   "engines": {
-    "bun": ">=1.1.0"
+    "node": ">=20.0.0"
   }
 }
 ```
@@ -91,7 +94,7 @@ Crear `/home/morfi/eleve-nanoclaw/mcp-monica/package.json`:
 {
   "compilerOptions": {
     "lib": ["ESNext"],
-    "target": "ESNext",
+    "target": "ES2022",
     "module": "ESNext",
     "moduleDetection": "force",
     "moduleResolution": "bundler",
@@ -102,7 +105,9 @@ Crear `/home/morfi/eleve-nanoclaw/mcp-monica/package.json`:
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["bun-types"]
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
   },
   "include": ["src/**/*", "tests/**/*", "mcp/**/*.ts"]
 }
@@ -117,11 +122,9 @@ node_modules/
 *.log
 dist/
 build/
-bun.lockb
 .DS_Store
+tests/fixtures/*.tmp.json
 ```
-
-> Nota: `bun.lockb` está ignorado a propósito en v0.1 mientras decidimos política de lockfile en CI. Si después decidimos commiteralo, lo sacamos del ignore.
 
 - [ ] **Step 4: Crear `.dockerignore`**
 
@@ -145,29 +148,30 @@ Dockerfile
 
 ```bash
 cd /home/morfi/eleve-nanoclaw/mcp-monica
-bun install
+npm install
 ```
 
-Expected: `bun install` completa sin error. `node_modules/` se crea.
+Expected: `npm install` completa sin error. `node_modules/` y `package-lock.json` se crean.
 
 - [ ] **Step 6: Verificar setup**
 
 ```bash
 cd /home/morfi/eleve-nanoclaw/mcp-monica
-bun --version
+node --version
 test -f package.json && echo "package.json OK"
 test -f tsconfig.json && echo "tsconfig.json OK"
 test -d node_modules && echo "node_modules OK"
+test -f package-lock.json && echo "lockfile OK"
 ```
 
-Expected: las 3 líneas "OK" + versión Bun ≥ 1.1.
+Expected: 4 líneas "OK" + versión Node ≥ 20.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 cd /home/morfi/eleve-nanoclaw/mcp-monica
-git add package.json tsconfig.json .gitignore .dockerignore
-git commit -m "chore: init Bun + TypeScript project skeleton"
+git add package.json package-lock.json tsconfig.json .gitignore .dockerignore
+git commit -m "chore: init Node + TypeScript project skeleton"
 ```
 
 ---
@@ -196,9 +200,9 @@ MCP server que expone al LLM (Mónica, vía nanoclaw) las edge functions de nego
 ```bash
 cp ../.env.example .env
 # completar SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY
-bun install
-bun run mcp:build
-bun start
+npm install
+npm run mcp:build
+npm start
 # server escuchando en MCP_PORT (default 3000)
 curl http://localhost:3000/health  # → {"status":"ok"}
 ```
@@ -207,12 +211,12 @@ curl http://localhost:3000/health  # → {"status":"ok"}
 
 - `mcp/` — registry source of truth (markdown frontmatter + generator). Pre-existe; no se modifica desde acá.
 - `src/` — implementación del MCP server.
-- `tests/` — tests unitarios e integración con `bun:test`.
+- `tests/` — tests unitarios e integración con Vitest.
 - `docs/` — guías de desarrollo (tool-registry, auth, agregar tool nueva).
 
 ## Cómo agregar una tool
 
-Ver [`docs/new-tool.md`](docs/new-tool.md). Resumen: crear `mcp/tools/<nombre>.md` con frontmatter, correr `bun run mcp:build`, commitear ambos archivos.
+Ver [`docs/new-tool.md`](docs/new-tool.md). Resumen: crear `mcp/tools/<nombre>.md` con frontmatter, correr `npm run mcp:build`, commitear ambos archivos.
 
 ## Contratos
 
@@ -256,7 +260,7 @@ Entry point para Claude Code cuando trabajás dentro del subproyecto `mcp-monica
 mcp-monica/
 ├── README.md                # entry humano
 ├── CLAUDE.md                # este archivo
-├── package.json             # Bun + TS
+├── package.json             # Node + TS
 ├── Dockerfile
 ├── src/
 │   ├── index.ts             # entry: env, arranca server
@@ -298,7 +302,7 @@ mcp-monica/
 
 - **Sin lógica de negocio acá**. La lógica vive en Supabase Edge Functions. Si una request requiere transformaciones de datos no triviales, eso va en la edge function, no en mcp-monica.
 - **Naming de tools**: snake_case en español (LLM-facing, ej. `agendar_cita`). Edge function path: kebab-case en inglés (ej. `book-appointment`). Definido por el registry; este server lo respeta.
-- **TDD**: cada módulo en `src/` tiene su test en `tests/`. Bun test runner (`bun test`).
+- **TDD**: cada módulo en `src/` tiene su test en `tests/`. Vitest (`npm test`).
 - **Errores HTTP**: 2xx OK, 4xx visible al LLM (mapeado), 5xx genérico (no filtrar internals al LLM).
 - **Conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
 
@@ -338,7 +342,7 @@ El "registry" de mcp-monica vive en `mcp/` y es la **single source of truth** pa
 ```
 mcp/tools/<nombre>.md  (markdown con frontmatter)
        │
-       │  bun run mcp:build
+       │  npm run mcp:build
        ▼
 mcp/_generator.ts  (parse, validate, filter)
        │
@@ -394,7 +398,7 @@ Mapeo entre tools del MCP, edge functions de Supabase y tablas afectadas. **Sour
 
 ## Tools `implemented` (expuestas en runtime)
 
-> Lista derivada de `mcp/manifest.json` actual. Para regenerar: `bun run mcp:build`.
+> Lista derivada de `mcp/manifest.json` actual. Para regenerar: `npm run mcp:build`.
 
 | Tool (LLM) | Edge function | Tablas afectadas | Side effects |
 |---|---|---|---|
@@ -522,7 +526,7 @@ Devuelve el catálogo de servicios. Si se pasa `categoria`, filtra.
 ## 3. Regenerar el manifest
 
 ```bash
-bun run mcp:build
+npm run mcp:build
 ```
 
 Si el generator se queja de validación (campo faltante, edge_function no encontrada, etc.), corregí.
@@ -530,8 +534,8 @@ Si el generator se queja de validación (campo faltante, edge_function no encont
 ## 4. Test local
 
 ```bash
-bun test                              # debería pasar; los tests están parametrizados sobre el manifest
-bun start                             # arranca server
+npm test                              # debería pasar; los tests están parametrizados sobre el manifest
+npm start                             # arranca server
 curl http://localhost:3000/health     # debe responder ok
 ```
 
@@ -579,7 +583,7 @@ git commit -m "docs(mcp-monica): add tool-registry, edge-functions-map, auth, ne
 `tests/errors.test.ts`:
 
 ```typescript
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import { mapHttpToMcpError } from "../src/errors.ts";
 
 describe("mapHttpToMcpError", () => {
@@ -625,7 +629,7 @@ describe("mapHttpToMcpError", () => {
 
 ```bash
 cd /home/morfi/eleve-nanoclaw/mcp-monica
-bun test tests/errors.test.ts 2>&1 | head -40
+npx vitest run tests/errors.test.ts 2>&1 | head -40
 ```
 
 Expected: errores tipo "Cannot find module '../src/errors.ts'" — los tests aún no encuentran la implementación.
@@ -665,7 +669,7 @@ export function mapHttpToMcpError(status: number, body?: unknown): McpErrorPaylo
 - [ ] **Step 4: Run tests (must pass)**
 
 ```bash
-bun test tests/errors.test.ts
+npx vitest run tests/errors.test.ts
 ```
 
 Expected: 6 tests passing.
@@ -698,7 +702,7 @@ Inyectamos `fetch` para tests (default: globalThis.fetch).
 `tests/supabase-client.test.ts`:
 
 ```typescript
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import { callEdgeFunction } from "../src/supabase-client.ts";
 
 const baseConfig = {
@@ -802,7 +806,7 @@ describe("callEdgeFunction", () => {
 - [ ] **Step 2: Run tests (must fail)**
 
 ```bash
-bun test tests/supabase-client.test.ts 2>&1 | head -20
+npx vitest run tests/supabase-client.test.ts 2>&1 | head -20
 ```
 
 Expected: module not found.
@@ -879,7 +883,7 @@ export async function callEdgeFunction(
 - [ ] **Step 4: Run tests (must pass)**
 
 ```bash
-bun test tests/supabase-client.test.ts
+npx vitest run tests/supabase-client.test.ts
 ```
 
 Expected: 5 tests passing.
@@ -900,7 +904,7 @@ git commit -m "feat(client): HTTP client to Supabase Edge Functions with timeout
 - Create: `mcp-monica/tests/fixtures/manifest.fixture.json`
 - Create: `mcp-monica/src/tools-loader.ts`
 
-**Contract**: la función `loadTools(manifestPath)` lee un manifest JSON del filesystem y devuelve `Array<{ name: string; description: string; inputSchema: object; edgeFunction: string }>`.
+**Contract**: la función `loadTools(manifestPath)` lee un manifest JSON del filesystem y devuelve `Promise<Array<{ name: string; description: string; inputSchema: object; edgeFunction: string }>>`.
 
 - Si el archivo no existe → throw con mensaje claro.
 - Si `tools` no es array → throw.
@@ -939,11 +943,14 @@ git commit -m "feat(client): HTTP client to Supabase Edge Functions with timeout
 `tests/tools-loader.test.ts`:
 
 ```typescript
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from "vitest";
 import { loadTools } from "../src/tools-loader.ts";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { writeFile } from "node:fs/promises";
 
-const FIXTURE = join(import.meta.dir, "fixtures/manifest.fixture.json");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURE = join(__dirname, "fixtures/manifest.fixture.json");
 
 describe("loadTools", () => {
   test("returns parsed tools with normalized field names", async () => {
@@ -964,8 +971,8 @@ describe("loadTools", () => {
   });
 
   test("throws on missing required field", async () => {
-    const badPath = join(import.meta.dir, "fixtures/bad-manifest.tmp.json");
-    await Bun.write(badPath, JSON.stringify({ tools: [{ description: "no name" }] }));
+    const badPath = join(__dirname, "fixtures/bad-manifest.tmp.json");
+    await writeFile(badPath, JSON.stringify({ tools: [{ description: "no name" }] }));
     await expect(loadTools(badPath)).rejects.toThrow(/tool_name|edge_function/);
   });
 });
@@ -974,7 +981,7 @@ describe("loadTools", () => {
 - [ ] **Step 3: Run tests (must fail)**
 
 ```bash
-bun test tests/tools-loader.test.ts 2>&1 | head -20
+npx vitest run tests/tools-loader.test.ts 2>&1 | head -20
 ```
 
 Expected: module not found.
@@ -1042,7 +1049,7 @@ export async function loadTools(manifestPath: string): Promise<ToolDefinition[]>
 - [ ] **Step 5: Run tests (must pass)**
 
 ```bash
-bun test tests/tools-loader.test.ts
+npx vitest run tests/tools-loader.test.ts
 ```
 
 Expected: 3 tests passing.
@@ -1073,7 +1080,7 @@ Lo testeamos invocando los handlers internos directamente, sin levantar HTTP —
 `tests/server.test.ts`:
 
 ```typescript
-import { describe, test, expect, mock } from "bun:test";
+import { describe, test, expect, vi } from "vitest";
 import { createMcpServer } from "../src/server.ts";
 import type { ToolDefinition } from "../src/tools-loader.ts";
 
@@ -1088,7 +1095,7 @@ const sampleTools: ToolDefinition[] = [
 
 describe("createMcpServer", () => {
   test("listTools returns tool definitions in MCP shape", async () => {
-    const callEdgeFn = mock(async () => ({ ok: true, data: {} }));
+    const callEdgeFn = vi.fn(async () => ({ ok: true as const, data: {} }));
     const server = createMcpServer({ tools: sampleTools, callEdgeFn });
     const list = await server._handlers.listTools();
     expect(list.tools).toHaveLength(1);
@@ -1101,8 +1108,8 @@ describe("createMcpServer", () => {
   });
 
   test("callTool routes to callEdgeFn with correct edge function name and arguments", async () => {
-    const callEdgeFn = mock(async (_name: string, _input: unknown) => ({
-      ok: true,
+    const callEdgeFn = vi.fn(async (_name: string, _input: unknown) => ({
+      ok: true as const,
       data: { success: true, cita: { id: "x" } },
     }));
     const server = createMcpServer({ tools: sampleTools, callEdgeFn });
@@ -1116,7 +1123,7 @@ describe("createMcpServer", () => {
   });
 
   test("callTool returns isError:true when callEdgeFn returns ok:false", async () => {
-    const callEdgeFn = mock(async () => ({
+    const callEdgeFn = vi.fn(async () => ({
       ok: false as const,
       error: { code: -32602, message: "Slot ya no disponible" },
     }));
@@ -1129,7 +1136,7 @@ describe("createMcpServer", () => {
   });
 
   test("callTool with unknown tool name returns isError:true", async () => {
-    const callEdgeFn = mock(async () => ({ ok: true, data: {} }));
+    const callEdgeFn = vi.fn(async () => ({ ok: true as const, data: {} }));
     const server = createMcpServer({ tools: sampleTools, callEdgeFn });
     const result = await server._handlers.callTool({
       params: { name: "no_existe", arguments: {} },
@@ -1145,7 +1152,7 @@ describe("createMcpServer", () => {
 - [ ] **Step 2: Run tests (must fail)**
 
 ```bash
-bun test tests/server.test.ts 2>&1 | head -20
+npx vitest run tests/server.test.ts 2>&1 | head -20
 ```
 
 Expected: module not found.
@@ -1228,7 +1235,7 @@ export function createMcpServer(deps: ServerDeps): McpServerHandle {
 - [ ] **Step 4: Run tests (must pass)**
 
 ```bash
-bun test tests/server.test.ts
+npx vitest run tests/server.test.ts
 ```
 
 Expected: 4 tests passing.
@@ -1250,31 +1257,31 @@ git commit -m "feat(server): wire MCP server with list/call tool handlers"
 - Create: `mcp-monica/src/health.ts`
 - Create: `mcp-monica/src/index.ts`
 
-**Health endpoint** (separado del MCP transport, siempre disponible en `GET /health`): el docker-compose lo usa para el healthcheck. Lo levantamos como un Bun.serve aparte en el mismo proceso.
+**Health endpoint** (siempre disponible en `GET /health`): el docker-compose lo usa para el healthcheck. Lo montamos como una ruta del mismo HTTP server que sirve MCP.
 
-**index.ts**: lee env, carga manifest, instancia client, crea server, arranca HTTP MCP transport y health.
+**index.ts**: lee env, carga manifest, instancia client, crea server, arranca HTTP server con rutas `/health` y `/mcp/sse`.
 
-> **Nota sobre transport HTTP del MCP SDK**: en el momento de escribir este plan, `@modelcontextprotocol/sdk` provee `SSEServerTransport` para Server-Sent Events sobre HTTP. La implementación abajo lo usa. Si en el momento de implementar el SDK ofrece un nuevo transport HTTP "streamable" más limpio, usalo y ajustá. La interfaz que importa es: el server escucha en `MCP_PORT`, y nanoclaw conecta con un cliente MCP HTTP.
+> **Nota sobre transport HTTP del MCP SDK**: `@modelcontextprotocol/sdk` provee `SSEServerTransport` para Server-Sent Events sobre HTTP. Toma el `(req, res)` de Node directamente. La implementación abajo lo usa. Si el SDK ofreciera un nuevo transport HTTP "streamable" más limpio, usalo y ajustá; lo que importa es que el server escucha en `MCP_PORT` y nanoclaw conecta con un cliente MCP HTTP.
 
 - [ ] **Step 1: Crear `src/health.ts`**
 
 ```typescript
+import { createServer } from "node:http";
+
 export function startHealthServer(port: number): { stop: () => void } {
-  const server = Bun.serve({
-    port,
-    fetch(req) {
-      const url = new URL(req.url);
-      if (url.pathname === "/health") {
-        return new Response(JSON.stringify({ status: "ok" }), {
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response("Not Found", { status: 404 });
-    },
+  const server = createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
+    res.writeHead(404);
+    res.end("Not Found");
   });
+  server.listen(port);
   return {
     stop() {
-      server.stop();
+      server.close();
     },
   };
 }
@@ -1283,12 +1290,16 @@ export function startHealthServer(port: number): { stop: () => void } {
 - [ ] **Step 2: Crear `src/index.ts`**
 
 ```typescript
-import { join } from "node:path";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { loadTools } from "./tools-loader.ts";
 import { callEdgeFunction } from "./supabase-client.ts";
 import { createMcpServer } from "./server.ts";
 import { startHealthServer } from "./health.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -1305,7 +1316,7 @@ async function main() {
   const port = Number(process.env.MCP_PORT ?? "3000");
 
   const manifestPath =
-    process.env.MCP_MONICA_MANIFEST_PATH ?? join(import.meta.dir, "..", "mcp", "manifest.json");
+    process.env.MCP_MONICA_MANIFEST_PATH ?? join(__dirname, "..", "mcp", "manifest.json");
 
   const tools = await loadTools(manifestPath);
   console.log(`mcp-monica: loaded ${tools.length} tools from ${manifestPath}`);
@@ -1313,39 +1324,42 @@ async function main() {
   const callEdgeFn = (name: string, input: unknown) =>
     callEdgeFunction({ baseUrl: supabaseUrl, serviceRoleKey }, name, input);
 
-  const { server } = createMcpServer({ tools, callEdgeFn });
+  const { server: mcpServer } = createMcpServer({ tools, callEdgeFn });
 
-  // Health endpoint on a different port? No — same port via routing.
-  // We mount /health and /mcp/sse on the same Bun.serve.
-  const httpServer = Bun.serve({
-    port,
-    async fetch(req) {
-      const url = new URL(req.url);
-      if (url.pathname === "/health") {
-        return new Response(JSON.stringify({ status: "ok", tools: tools.length }), {
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      if (url.pathname === "/mcp/sse") {
-        const transport = new SSEServerTransport("/mcp/sse", req as unknown as Response);
-        await server.connect(transport);
-        return new Response(null, { status: 200 });
-      }
-      return new Response("Not Found", { status: 404 });
-    },
+  // Single HTTP server: /health for healthcheck, /mcp/sse for MCP transport.
+  const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+
+    if (url.pathname === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", tools: tools.length }));
+      return;
+    }
+
+    if (url.pathname === "/mcp/sse") {
+      const transport = new SSEServerTransport("/mcp/sse", res);
+      await mcpServer.connect(transport);
+      // SSEServerTransport keeps `res` open; do NOT call res.end() here.
+      return;
+    }
+
+    res.writeHead(404);
+    res.end("Not Found");
   });
 
-  console.log(`mcp-monica: listening on http://0.0.0.0:${port}`);
-  console.log(`  health: GET  /health`);
-  console.log(`  mcp:    GET  /mcp/sse`);
+  httpServer.listen(port, () => {
+    console.log(`mcp-monica: listening on http://0.0.0.0:${port}`);
+    console.log(`  health: GET  /health`);
+    console.log(`  mcp:    GET  /mcp/sse`);
+  });
 
-  // Note: startHealthServer is unused when we route /health within the main server.
-  // Kept as helper module for the case we want to split later. Suppress unused import.
+  // startHealthServer kept as helper module for future split scenarios.
   void startHealthServer;
 
-  // Keep process alive
-  process.on("SIGTERM", () => httpServer.stop());
-  process.on("SIGINT", () => httpServer.stop());
+  // Graceful shutdown
+  const shutdown = () => httpServer.close(() => process.exit(0));
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
 
 main().catch((err) => {
@@ -1354,7 +1368,7 @@ main().catch((err) => {
 });
 ```
 
-> **Realismo**: la integración SSE con `Bun.serve` y `SSEServerTransport` puede requerir un par de iteraciones para que el handshake funcione (el SDK MCP a veces espera un objeto Response/Request específico). Si el implementer ve que el SDK no acepta el shape de `req` directamente, ajustar — la idea es: server escucha en `port`, ruta `/mcp/sse` para el transport MCP, ruta `/health` para healthcheck. **No** crear segundo Bun.serve si todo cabe en uno; si la integración SSE pide separar, separá usando puertos distintos vía env.
+> **Realismo**: la integración SSE con `node:http` y `SSEServerTransport` puede requerir un par de iteraciones para que el handshake funcione (el SDK MCP espera un `ServerResponse` de Node y headers SSE específicos). Si el implementer ve que el SDK no acepta `res` tal cual, ajustar — la idea es: server escucha en `port`, ruta `/mcp/sse` para el transport MCP, ruta `/health` para healthcheck.
 
 - [ ] **Step 3: Smoke check — server arranca**
 
@@ -1364,7 +1378,7 @@ SUPABASE_URL=https://example.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=fake-test-key \
 MCP_PORT=3000 \
 MCP_MONICA_MANIFEST_PATH=$PWD/mcp/manifest.json \
-timeout 3 bun start &
+timeout 3 npm start &
 SERVER_PID=$!
 sleep 1
 curl -s http://localhost:3000/health
@@ -1399,20 +1413,29 @@ git commit -m "feat(server): index entry with /health and /mcp/sse routes"
 # mcp-monica — MCP server image
 # ============================================================================
 
-# Stage 1: install deps
-FROM oven/bun:1.1-alpine AS deps
+# Stage 1: install deps (production only)
+FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json bun.lockb* ./
-RUN bun install --frozen-lockfile || bun install
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
 
-# Stage 2: copy source
-FROM oven/bun:1.1-alpine AS runtime
+# Stage 2: install full deps (incl. tsx) for runtime TS execution
+FROM node:20-alpine AS deps-full
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+
+# Stage 3: runtime
+FROM node:20-alpine AS runtime
+WORKDIR /app
+
+# wget para el healthcheck (alpine ya lo trae como busybox applet, redundante pero explícito)
+RUN apk add --no-cache wget
 
 # Non-root user
 RUN addgroup -S app && adduser -S app -G app
 
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps-full /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
 COPY src ./src
 COPY mcp ./mcp
@@ -1420,14 +1443,17 @@ COPY mcp ./mcp
 USER app
 
 ENV MCP_PORT=3000
+ENV NODE_ENV=production
 EXPOSE 3000
 
-# Healthcheck (also defined at compose level; this is a fallback)
+# Healthcheck (también definido en compose; este es fallback)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget --spider -q http://localhost:3000/health || exit 1
 
-CMD ["bun", "run", "src/index.ts"]
+CMD ["npx", "tsx", "src/index.ts"]
 ```
+
+> Nota: usamos `tsx` en runtime (sin compilar a JS) porque mcp-monica es chico y la latencia de boot es irrelevante. Si después querés imagen más liviana, agregás un step de `tsc --emit` y CMD `node dist/index.js`. Para v1, `tsx` mantiene el flujo idéntico a dev.
 
 - [ ] **Step 2: Build local**
 
@@ -1459,7 +1485,7 @@ Expected: `{"status":"ok","tools":<n>}` y el container se detiene limpio.
 
 ```bash
 git add Dockerfile
-git commit -m "chore(docker): add multi-stage Bun image"
+git commit -m "chore(docker): add multi-stage Node image"
 ```
 
 ---
@@ -1472,7 +1498,7 @@ git commit -m "chore(docker): add multi-stage Bun image"
 
 ```bash
 cd /home/morfi/eleve-nanoclaw/mcp-monica
-bun test
+npm test
 ```
 
 Expected: todos los tests passing (al menos `errors` 6, `supabase-client` 5, `tools-loader` 3, `server` 4 = 18+).
@@ -1554,7 +1580,7 @@ Final summary. Reportar:
 
 | Spec sección | Cubierto en el plan |
 |---|---|
-| 5.1 Stack TS+Bun+MCP SDK | Task 1 (deps), Tasks 4-8 (impl) |
+| 5.1 Stack TS+Node+MCP SDK (cambio runtime: Node en lugar de Bun, ver task 0) | Task 1 (deps), Tasks 4-8 (impl) |
 | 5.2 Estructura de archivos | Tasks 4-8 |
 | 5.3 Boot (env, manifest, register, listen) | Task 8 (index.ts) |
 | 5.4 Manifest bundled, no fetched | Dockerfile copia `mcp/`; Task 9 |
@@ -1575,7 +1601,7 @@ Final summary. Reportar:
 
 **Riesgos conocidos** (intencionales):
 - La API exacta del MCP SDK puede haber cambiado. El plan documenta la firma esperada; si el SDK difiere, ajustar imports y nombres conservando la semántica (lista de tools, call con name+args, isError en fallo).
-- El SSE transport con Bun.serve puede requerir adaptación. Plan menciona y deja flexibilidad.
+- El SSE transport con `node:http` puede requerir adaptación. Plan menciona y deja flexibilidad.
 
 ---
 
