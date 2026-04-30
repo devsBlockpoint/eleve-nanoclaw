@@ -1,0 +1,26 @@
+services:
+  nanoclaw-host:
+    image: ghcr.io/devsblockpoint/nanoclaw-host:0.6
+    privileged: true
+    restart: unless-stopped
+    expose:
+      - "3001"
+    volumes:
+      - nanoclaw-data-v2:/app/data
+    environment:
+      # Config no-secret
+      - NODE_ENV=production
+      - NANOCLAW_PORT=3001
+      - NANOCLAW_AGENT_SRC_BAKED=true
+      - CONTAINER_IMAGE=ghcr.io/devsblockpoint/nanoclaw-agent:latest
+      - AGENT_SYSTEM_PROMPT_SOURCE=url
+      - AGENT_SYSTEM_PROMPT_URL=https://drive.google.com/uc?export=download&id=1B_YmJIEGg3jQ5-ZQYZQkNGZpnynvZ_Ma
+      - MCP_MONICA_URL=https://nanoclaw-mcp-monica.6ey9sr.easypanel.host/mcp/sse
+      # Secrets — REEMPLAZÁ los REPLACE_ME_* con tus valores reales antes de Deploy
+      - AGENT_INBOUND_TOKEN=REPLACE_ME_AGENT_INBOUND_TOKEN
+      - CLAUDE_CODE_OAUTH_TOKEN=REPLACE_ME_CLAUDE_OAUTH_TOKEN
+      - ELEVE_OUTBOUND_URL=https://CHANGEME.supabase.co/functions/v1/n8n-whatsapp-agent-response
+      - ELEVE_OUTBOUND_TOKEN=REPLACE_ME_ELEVE_OUTBOUND_TOKEN
+
+volumes:
+  nanoclaw-data-v2:
