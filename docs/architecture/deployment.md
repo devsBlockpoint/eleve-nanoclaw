@@ -79,6 +79,11 @@ Easypanel UI → **Create service** → **App** → Source: **Image**.
 **Env vars:**
 
 ```dotenv
+# Timezone — fuente primaria. El código ya defaultea a America/Mazatlan como red de
+# seguridad, pero esta var es la fuente oficial para que el SO y Node.js usen la zona
+# correcta en todos los módulos (no solo el resolver de nanoclaw).
+TZ=America/Mazatlan
+
 # ÉLEVÉ inbound
 AGENT_INBOUND_TOKEN=<bearer compartido con whatsapp-webhook de Supabase>
 NANOCLAW_PORT=3001
