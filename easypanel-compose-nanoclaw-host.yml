@@ -10,6 +10,11 @@ services:
     environment:
       # Config no-secret
       - NODE_ENV=production
+      # Zona horaria de la clínica (Los Mochis, Sinaloa, UTC-7). El host la
+      # reenvía al contenedor del agente vía `-e TZ=` (container-runner.ts),
+      # así que esta sola var cubre host + agente. Si se omite, el código
+      # cae a America/Mazatlan igual (default en config.ts / timezone.ts).
+      - TZ=America/Mazatlan
       - NANOCLAW_PORT=3001
       - NANOCLAW_AGENT_SRC_BAKED=true
       - CONTAINER_IMAGE=ghcr.io/devsblockpoint/nanoclaw-agent:latest
