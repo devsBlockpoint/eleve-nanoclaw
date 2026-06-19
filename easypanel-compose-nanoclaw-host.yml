@@ -1,6 +1,6 @@
 services:
   nanoclaw-host:
-    image: ghcr.io/devsblockpoint/nanoclaw-host:0.6
+    image: ghcr.io/devsblockpoint/nanoclaw-host:0.7
     privileged: true
     restart: unless-stopped
     expose:
@@ -20,6 +20,9 @@ services:
       - CONTAINER_IMAGE=ghcr.io/devsblockpoint/nanoclaw-agent:latest
       - AGENT_SYSTEM_PROMPT_SOURCE=url
       - AGENT_SYSTEM_PROMPT_URL=https://drive.google.com/uc?export=download&id=1B_YmJIEGg3jQ5-ZQYZQkNGZpnynvZ_Ma
+      # Recarga el prompt del Drive cada 1h → las sesiones nuevas toman los
+      # cambios de Ernesto sin reiniciar el host (index.ts re-escribe CLAUDE.local.md).
+      - AGENT_SYSTEM_PROMPT_RELOAD_INTERVAL=3600
       - MCP_MONICA_URL=https://nanoclaw-mcp-monica.6ey9sr.easypanel.host/mcp/sse
       # Secrets — REEMPLAZÁ los REPLACE_ME_* con tus valores reales antes de Deploy
       - AGENT_INBOUND_TOKEN=REPLACE_ME_AGENT_INBOUND_TOKEN
