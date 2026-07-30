@@ -50,6 +50,9 @@ Easypanel UI → **Create service** → **App** → Source: **Image**.
 SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=<secret real, NO compartir>
 MCP_PORT=3000
+# Requerido si /mcp se expone público para el canal de voz (ElevenLabs).
+# Mismo valor que en nanoclaw-host. Ver docs/runbooks/deploy-voz-mcp.md
+MCP_AUTH_TOKEN=<secret real>
 ```
 
 **Network**: misma red interna que `nanoclaw-host` para que se vean por nombre de servicio.
@@ -92,8 +95,12 @@ NANOCLAW_PORT=3001
 ELEVE_OUTBOUND_URL=https://YOUR_PROJECT.supabase.co/functions/v1/n8n-whatsapp-agent-response
 ELEVE_OUTBOUND_TOKEN=<bearer outbound, e.g. service_role>
 
-# MCP server (red interna Easypanel — usar el nombre del service)
-MCP_MONICA_URL=http://mcp-monica:3000/mcp/sse
+# MCP server (red interna Easypanel — usar el nombre del service).
+# Ruta /mcp (StreamableHTTP). NO /mcp/sse (da 404 con el server actual).
+MCP_MONICA_URL=http://mcp-monica:3000/mcp
+# Requerido si /mcp está protegido con token (canal de voz). Mismo valor que en mcp-monica.
+# Ver docs/runbooks/deploy-voz-mcp.md
+MCP_AUTH_TOKEN=<secret real>
 
 # Imagen del agent runner (apuntar a GHCR)
 CONTAINER_IMAGE=ghcr.io/devsblockpoint/nanoclaw-agent:latest
