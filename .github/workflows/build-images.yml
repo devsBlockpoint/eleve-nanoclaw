@@ -31,8 +31,23 @@ jobs:
           - nombre: nanoclaw-host
             contexto: nanoclaw
             dockerfile: nanoclaw/Dockerfile
+          # 2.3 GB, con capas sueltas de 750 MB. Publicarla desde una máquina
+          # local es poco fiable: Docker reintenta el blob ENTERO, así que una
+          # capa que se corta al 90% vuelve a empezar de cero. Desde el runner
+          # es GitHub → ghcr por la misma red, y deja de ser un problema.
+          - nombre: nanoclaw-agent
+            contexto: nanoclaw/container
+            dockerfile: nanoclaw/container/Dockerfile
 
     steps:
+      # nanoclaw-agent pesa 2.3 GB y el runner viene con poco margen: sin esto
+      # el build muere con "no space left on device" a mitad.
+      - name: Liberar espacio
+        if: matrix.nombre == 'nanoclaw-agent'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          df -h / | tail -1
+
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
